@@ -1,0 +1,61 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>School Hide &amp; Seek</title>
+<style>
+body{margin:0;min-height:100vh;background:linear-gradient(#27496d,#16212e);color:#fff;font-family:system-ui,sans-serif;display:flex;justify-content:center}
+#app{width:100%;max-width:480px;padding:16px;text-align:center}
+h1{color:#f4b942;margin:8px 0 0;text-shadow:2px 2px #000}
+button,input{font-size:16px;padding:10px 14px;border-radius:10px;border:0;margin:4px}
+button{background:#f4b942;font-weight:700}button:disabled{opacity:.4}
+#st{margin:10px;padding:6px;border-radius:8px;background:#0006}
+.pl{display:flex;justify-content:space-between;padding:8px 12px;margin:4px 0;background:#0007;border-radius:8px}
+.ok{color:#6f6}.no{color:#f99}.host{color:#f4b942}
+#cd{text-transform:uppercase;width:110px;text-align:center}
+</style></head><body><div id="app">
+<h1>SCHOOL HIDE &amp; SEEK</h1><small>Created by NH Nirob</small>
+<div id="st">Not connected</div>
+<div id="home">
+<input id="nm" placeholder="Your name" maxlength="12"><br>
+<button id="cr">Create Room</button><br>
+<input id="cd" placeholder="CODE" maxlength="5"><button id="jn">Join Room</button>
+</div>
+<div id="lob" style="display:none">
+<h2>Room <span id="rc"></span></h2><small>Share this code with friends</small>
+<div id="pls"></div>
+<button id="rd">Ready</button><button id="sg" disabled>Start Match</button>
+<p><small>Game sync (positions, roles, scanner) arrives in the next phase.</small></p>
+</div></div>
+<script src="https://unpkg.com/colyseus.js@^0.15.0/dist/colyseus.js"></script>
+<script>
+// >>> EDIT THIS LINE after Render gives you your address (keep wss://, no trailing slash) <<<
+const SERVER="wss://YOUR-SERVICE.onrender.com";
+const HTTP=SERVER.replace("wss://","https://");
+const $=i=>document.getElementById(i);let room=null,rdy=false;
+const st=t=>$("st").textContent=t;
+$("nm").value=localStorage.getItem("shs_name")||"";
+const mkCode=()=>{const a="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";let c="";for(let i=0;i<5;i++)c+=a[Math.random()*a.length|0];return c};
+async function wake(){st("Waking server... can take up to a minute");
+ for(let i=0;i<24;i++){try{const r=await fetch(HTTP+"/",{cache:"no-store"});if(r.ok){st("Server online");return true}}catch(e){}
+  await new Promise(r=>setTimeout(r,5000))}
+ st("Server unreachable - check SERVER address in index.html");return false}
+async function go(create){
+ const name=$("nm").value.trim()||"Player";try{localStorage.setItem("shs_name",name)}catch(e){}
+ const code=create?mkCode():$("cd").value.trim().toUpperCase();
+ if(!code){st("Enter a room code");return}
+ if(!await wake())return;
+ try{const cl=new Colyseus.Client(SERVER);
+  room=create?await cl.create("school",{code,name}):await cl.join("school",{code,name});bind()}
+ catch(e){st(create?"Could not create room":"Room "+code+" not found")}}
+function bind(){$("home").style.display="none";$("lob").style.display="block";st("Connected");rdy=false;
+ room.onMessage("lobby",render);
+ room.onMessage("start",()=>st("Match started (game sync comes in the next phase)"));
+ room.onLeave(()=>{st("Disconnected");$("lob").style.display="none";$("home").style.display="block"});
+ room.onError((c,m)=>st("Error: "+m));room.send("hello")}
+function render(d){$("rc").textContent=d.code;const me=room.sessionId;
+ $("pls").innerHTML=d.players.map(p=>`<div class="pl"><span>${esc(p.name)}${p.id===me?" (you)":""} ${p.id===d.host?'<b class="host">HOST</b>':""}</span><span class="${p.ready?"ok":"no"}">${p.ready?"READY":"not ready"}</span></div>`).join("");
+ $("sg").disabled=!(d.host===me&&d.phase==="lobby"&&d.players.every(p=>p.ready));
+ $("rd").disabled=d.phase!=="lobby";$("rd").textContent=rdy?"Unready":"Ready"}
+const esc=s=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+$("cr").onclick=()=>go(true);$("jn").onclick=()=>go(false);
+$("rd").onclick=()=>{rdy=!rdy;room.send("ready",rdy)};$("sg").onclick=()=>room.send("start");
+</script></body></html>

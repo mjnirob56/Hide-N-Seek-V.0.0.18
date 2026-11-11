@@ -45,7 +45,7 @@ async function go(create){
  if(!await wake())return;
  try{const cl=new Colyseus.Client(SERVER);
   room=create?await cl.create("school",{code,name}):await cl.join("school",{code,name});bind()}
- catch(e){st(create?"Could not create room":"Room "+code+" not found")}}
+ catch(e){console.log(e);st((create?"Create failed: ":"Join failed: ")+((e&&e.message)||e))}}
 function bind(){$("home").style.display="none";$("lob").style.display="block";st("Connected");rdy=false;
  room.onMessage("lobby",render);
  room.onMessage("start",()=>st("Match started (game sync comes in the next phase)"));

@@ -5,8 +5,8 @@
 body{margin:0;min-height:100vh;background:linear-gradient(#27496d,#16212e);color:#fff;font-family:system-ui,sans-serif;display:flex;justify-content:center}
 #app{width:100%;max-width:480px;padding:16px;text-align:center}
 h1{color:#f4b942;margin:8px 0 0;text-shadow:2px 2px #000}
-button,input{font-size:16px;padding:10px 14px;border-radius:10px;border:0;margin:4px}
-button{background:#f4b942;font-weight:700}button:disabled{opacity:.4}
+button,input,a.b{font-size:16px;padding:10px 14px;border-radius:10px;border:0;margin:4px}
+button,a.b{background:#f4b942;color:#111;font-weight:700;text-decoration:none;display:inline-block}button:disabled{opacity:.4}
 #st{margin:10px;padding:6px;border-radius:8px;background:#0006}
 .pl{display:flex;justify-content:space-between;padding:8px 12px;margin:4px 0;background:#0007;border-radius:8px}
 .ok{color:#6f6}.no{color:#f99}.host{color:#f4b942}
@@ -17,7 +17,8 @@ button{background:#f4b942;font-weight:700}button:disabled{opacity:.4}
 <div id="home">
 <input id="nm" placeholder="Your name" maxlength="12"><br>
 <button id="cr">Create Room</button><br>
-<input id="cd" placeholder="CODE" maxlength="5"><button id="jn">Join Room</button>
+<input id="cd" placeholder="CODE" maxlength="5"><button id="jn">Join Room</button><br>
+<a class="b" href="https://claude.ai/artifact/9FPTs337v9xnEfp2972eY7">Play With Bots (offline)</a>
 </div>
 <div id="lob" style="display:none">
 <h2>Room <span id="rc"></span></h2><small>Share this code with friends</small>
@@ -41,6 +42,8 @@ function getClient(){const C=window.Colyseus;if(!C)return null;
  return null}
 function loadScript(u){return new Promise(r=>{const s=document.createElement("script");s.src=u;s.onload=()=>r(true);s.onerror=()=>r(false);document.head.appendChild(s)})}
 async function lib(){let C=getClient();if(C)return C;
+ const U=["https://cdn.jsdelivr.net/npm/colyseus.js@0.15/+esm","https://esm.sh/colyseus.js@0.15"];
+ for(const u of U){try{const m=await import(u);C=m.Client||(m.default&&(m.default.Client||m.default));if(typeof C==="function")return C}catch(e){console.log(u,e)}}
  for(const u of LIBS){await loadScript(u);C=getClient();if(C)return C}
  return null}
 async function wake(){st("Waking server... can take up to a minute");
@@ -52,8 +55,9 @@ async function go(create){
  const code=create?mkCode():$("cd").value.trim().toUpperCase();
  if(!code){st("Enter a room code");return}
  if(!await wake())return;
+ st("Loading multiplayer library...");
  const CC=await lib();
- if(!CC){st("Colyseus library failed: "+(window.Colyseus?Object.keys(window.Colyseus).join(","):"not loaded"));return}
+ if(!CC){st("Multiplayer library could not load. Try another browser or network.");return}
  try{const cl=new CC(SERVER);
   room=create?await cl.create("school",{code,name}):await cl.join("school",{code,name});bind()}
  catch(e){console.log(e);st((create?"Create failed: ":"Join failed: ")+((e&&e.message)||e))}}
@@ -63,10 +67,4 @@ function bind(){$("home").style.display="none";$("lob").style.display="block";st
  room.onLeave(()=>{st("Disconnected");$("lob").style.display="none";$("home").style.display="block"});
  room.onError((c,m)=>st("Error: "+m));room.send("hello")}
 function render(d){$("rc").textContent=d.code;const me=room.sessionId;
- $("pls").innerHTML=d.players.map(p=>`<div class="pl"><span>${esc(p.name)}${p.id===me?" (you)":""} ${p.id===d.host?'<b class="host">HOST</b>':""}</span><span class="${p.ready?"ok":"no"}">${p.ready?"READY":"not ready"}</span></div>`).join("");
- $("sg").disabled=!(d.host===me&&d.phase==="lobby"&&d.players.every(p=>p.ready));
- $("rd").disabled=d.phase!=="lobby";$("rd").textContent=rdy?"Unready":"Ready"}
-const esc=s=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-$("cr").onclick=()=>go(true);$("jn").onclick=()=>go(false);
-$("rd").onclick=()=>{rdy=!rdy;room.send("ready",rdy)};$("sg").onclick=()=>room.send("start");
-</script></body></html>
+ $("pls").innerHTML=d.players.map(p=>`<div class="pl"><span>${esc(p.name)}${p.id===me?" (you)":""} ${p.id===d.host?'<b class="host">HOST</b>':""}</span><span class="${p.re

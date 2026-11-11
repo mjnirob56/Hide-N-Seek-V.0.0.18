@@ -25,15 +25,24 @@ button{background:#f4b942;font-weight:700}button:disabled{opacity:.4}
 <button id="rd">Ready</button><button id="sg" disabled>Start Match</button>
 <p><small>Game sync (positions, roles, scanner) arrives in the next phase.</small></p>
 </div></div>
-<script src="https://unpkg.com/colyseus.js@^0.15.0/dist/colyseus.js"></script>
 <script>
-// >>> EDIT THIS LINE after Render gives you your address (keep wss://, no trailing slash) <<<
 const SERVER="wss://school-hide-seek.onrender.com";
 const HTTP=SERVER.replace("wss://","https://");
 const $=i=>document.getElementById(i);let room=null,rdy=false;
 const st=t=>$("st").textContent=t;
 $("nm").value=localStorage.getItem("shs_name")||"";
 const mkCode=()=>{const a="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";let c="";for(let i=0;i<5;i++)c+=a[Math.random()*a.length|0];return c};
+const LIBS=["https://cdn.jsdelivr.net/npm/colyseus.js@0.15/dist/colyseus.js","https://unpkg.com/colyseus.js@0.15/dist/colyseus.js"];
+function getClient(){const C=window.Colyseus;if(!C)return null;
+ if(typeof C.Client==="function")return C.Client;
+ if(typeof C==="function")return C;
+ if(C.default&&typeof C.default.Client==="function")return C.default.Client;
+ if(C.Colyseus&&typeof C.Colyseus.Client==="function")return C.Colyseus.Client;
+ return null}
+function loadScript(u){return new Promise(r=>{const s=document.createElement("script");s.src=u;s.onload=()=>r(true);s.onerror=()=>r(false);document.head.appendChild(s)})}
+async function lib(){let C=getClient();if(C)return C;
+ for(const u of LIBS){await loadScript(u);C=getClient();if(C)return C}
+ return null}
 async function wake(){st("Waking server... can take up to a minute");
  for(let i=0;i<24;i++){try{const r=await fetch(HTTP+"/",{cache:"no-store"});if(r.ok){st("Server online");return true}}catch(e){}
   await new Promise(r=>setTimeout(r,5000))}
@@ -43,7 +52,9 @@ async function go(create){
  const code=create?mkCode():$("cd").value.trim().toUpperCase();
  if(!code){st("Enter a room code");return}
  if(!await wake())return;
- try{const cl=new Colyseus.Client(SERVER);
+ const CC=await lib();
+ if(!CC){st("Colyseus library failed: "+(window.Colyseus?Object.keys(window.Colyseus).join(","):"not loaded"));return}
+ try{const cl=new CC(SERVER);
   room=create?await cl.create("school",{code,name}):await cl.join("school",{code,name});bind()}
  catch(e){console.log(e);st((create?"Create failed: ":"Join failed: ")+((e&&e.message)||e))}}
 function bind(){$("home").style.display="none";$("lob").style.display="block";st("Connected");rdy=false;

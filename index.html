@@ -9,7 +9,7 @@ button,input,a.b{font-size:16px;padding:10px 14px;border-radius:10px;border:0;ma
 button,a.b{background:#f4b942;color:#111;font-weight:700;text-decoration:none;display:inline-block}button:disabled{opacity:.4}
 #st{margin:10px;padding:6px;border-radius:8px;background:#0006}
 .pl{display:flex;justify-content:space-between;padding:8px 12px;margin:4px 0;background:#0007;border-radius:8px}
-.ok{color:#6f6}.no{color:#f99}.host{color:#f4b942}
+.ok{color:#6f6}.no{color:#f99}.host{color:#f4b942}.bot{color:#8cf}
 #cd{text-transform:uppercase;width:110px;text-align:center}
 </style></head><body><div id="app">
 <h1>SCHOOL HIDE &amp; SEEK</h1><small>Created by NH Nirob</small>
@@ -22,14 +22,16 @@ button,a.b{background:#f4b942;color:#111;font-weight:700;text-decoration:none;di
 </div>
 <div id="lob" style="display:none">
 <h2>Room <span id="rc"></span></h2><small>Share this code with friends</small>
+<div id="cnt" style="margin:6px"></div>
 <div id="pls"></div>
+<div id="hc" style="display:none"><button id="ab">+ Bot</button><button id="rb">- Bot</button></div>
 <button id="rd">Ready</button><button id="sg" disabled>Start Match</button>
-<p><small>Online match gameplay arrives in the next phase.</small></p>
+<p><small>Fewer than 5 players are filled with bots at start.</small></p>
 </div></div>
 <script>
 const SERVER="wss://school-hide-seek.onrender.com";
 const HTTP=SERVER.replace("wss://","https://");
-const $=i=>document.getElementById(i);let ws=null,me=null,rdy=false;
+const $=i=>document.getElementById(i);let ws=null,me=null,rdy=false,last=null;
 const st=t=>$("st").textContent=t;
 $("nm").value=localStorage.getItem("shs_name")||"";
 const mkCode=()=>{const a="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";let c="";for(let i=0;i<5;i++)c+=a[Math.random()*a.length|0];return c};
@@ -48,16 +50,22 @@ async function go(create){
  try{ws=new WebSocket(SERVER)}catch(e){st("Connection failed: "+e.message);return}
  ws.onopen=()=>send(create?"create":"join",{code,name});
  ws.onerror=()=>st("Connection error");
- ws.onclose=()=>{if($("lob").style.display==="block"){st("Disconnected");$("lob").style.display="none";$("home").style.display="block"}};
+ ws.onclose=()=>{if($("lob").style.display==="block"&&!window.leaving){st("Disconnected");$("lob").style.display="none";$("home").style.display="block"}};
  ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(x){return}
   if(m.t==="joined"){me=m.d.id;rdy=false;$("home").style.display="none";$("lob").style.display="block";st("Connected")}
   else if(m.t==="lobby")render(m.d);
-  else if(m.t==="start")st("Match started (online gameplay comes in the next phase)");
+  else if(m.t==="start"){window.leaving=true;st("Starting match...");location.href="game.html?room="+encodeURIComponent($("rc").textContent)+"&id="+me+"&name="+encodeURIComponent($("nm").value.trim()||"Player")}
   else if(m.t==="err"){st(m.d);try{ws.close()}catch(x){}}}}
-function render(d){$("rc").textContent=d.code;
- $("pls").innerHTML=d.players.map(p=>`<div class="pl"><span>${esc(p.name)}${p.id===me?" (you)":""} ${p.id===d.host?'<b class="host">HOST</b>':""}</span><span class="${p.ready?"ok":"no"}">${p.ready?"READY":"not ready"}</span></div>`).join("");
- $("sg").disabled=!(d.host===me&&d.phase==="lobby"&&d.players.every(p=>p.ready));
+function render(d){last=d;$("rc").textContent=d.code;
+ const ish=d.host===me;
+ $("cnt").textContent="Real players: "+d.players.length+" + Bots: "+d.bots.length+" = "+(d.players.length+d.bots.length)+" / 10";
+ $("pls").innerHTML=d.players.map(p=>`<div class="pl"><span>${esc(p.name)}${p.id===me?" (you)":""} ${p.id===d.host?'<b class="host">HOST</b>':""}</span><span class="${p.ready?"ok":"no"}">${p.ready?"READY":"not ready"}</span></div>`).join("")
+  +d.bots.map(n=>`<div class="pl"><span class="bot">${esc(n)} (bot)</span><span class="ok">READY</span></div>`).join("");
+ $("hc").style.display=ish&&d.phase==="lobby"?"block":"none";
+ $("sg").disabled=!(ish&&d.phase==="lobby"&&d.players.every(p=>p.ready));
  $("rd").disabled=d.phase!=="lobby";$("rd").textContent=rdy?"Unready":"Ready"}
 $("cr").onclick=()=>go(true);$("jn").onclick=()=>go(false);
 $("rd").onclick=()=>{rdy=!rdy;send("ready",{v:rdy})};$("sg").onclick=()=>send("start",{});
+$("ab").onclick=()=>last&&send("bots",{n:last.bots.length+1});
+$("rb").onclick=()=>last&&send("bots",{n:last.bots.length-1});
 </script></body></html>

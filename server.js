@@ -1,52 +1,83 @@
-// School Hide & Seek - multiplayer server (Phase 1: rooms + lobby). Created by NH Nirob.
+// School Hide & Seek - lobby server (ws). Created by NH Nirob.
 const http = require("http");
-const express = require("express");
-const { Server, Room } = require("colyseus");
-const { WebSocketTransport } = require("@colyseus/ws-transport");
+const { WebSocketServer } = require("ws");
 
-class SchoolRoom extends Room {
-  maxClients = 10;
-  onCreate(opts) {
-    this.code = String(opts.code || "").toUpperCase().slice(0, 5);
-    this.setMetadata({ code: this.code });
-    this.p = new Map();
-    this.host = null;
-    this.phase = "lobby";
-    this.onMessage("hello", () => this.sync());
-    this.onMessage("ready", (c, v) => {
-      const p = this.p.get(c.sessionId);
-      if (p && this.phase === "lobby") { p.ready = !!v; this.sync(); }
-    });
-    this.onMessage("start", (c) => {
-      if (c.sessionId !== this.host || this.phase !== "lobby") return;
-      if (![...this.p.values()].every((p) => p.ready)) return;
-      this.phase = "started";
-      this.lock();
-      this.broadcast("start", {});
-      this.sync();
-    });
-  }
-  onJoin(c, opts) {
-    const name = String((opts && opts.name) || "Player").slice(0, 12);
-    this.p.set(c.sessionId, { id: c.sessionId, name, ready: false });
-    if (!this.host) this.host = c.sessionId;
-    this.sync();
-  }
-  onLeave(c) {
-    this.p.delete(c.sessionId);
-    if (this.host === c.sessionId) this.host = [...this.p.keys()][0] || null;
-    this.sync();
-  }
-  sync() {
-    this.broadcast("lobby", { code: this.code, host: this.host, phase: this.phase, players: [...this.p.values()] });
-  }
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { "Access-Control-Allow-Origin": "*", "Content-Type": "text/plain" });
+  res.end("School Hide & Seek server OK");
+});
+const wss = new WebSocketServer({ server });
+const rooms = new Map();
+let nid = 1;
+
+const send = (ws, t, d) => { if (ws.readyState === 1) ws.send(JSON.stringify({ t, d })); };
+const pub = (r) => ({
+  code: r.code, host: r.host, phase: r.phase,
+  players: [...r.players.values()].map((p) => ({ id: p.id, name: p.name, ready: p.ready })),
+});
+const sync = (r) => { const m = pub(r); for (const p of r.players.values()) send(p.ws, "lobby", m); };
+
+function leave(ws) {
+  const r = ws.room;
+  if (!r) return;
+  r.players.delete(ws.id);
+  ws.room = null;
+  if (!r.players.size) { rooms.delete(r.code); return; }
+  if (r.host === ws.id) r.host = r.players.keys().next().value;
+  sync(r);
 }
 
-const app = express();
-app.use((req, res, next) => { res.header("Access-Control-Allow-Origin", "*"); next(); });
-app.get("/", (req, res) => res.send("School Hide & Seek server OK"));
-const server = http.createServer(app);
-const gameServer = new Server({ transport: new WebSocketTransport({ server }) });
-gameServer.define("school", SchoolRoom).filterBy(["code"]);
-gameServer.listen(process.env.PORT || 2567);
+wss.on("connection", (ws) => {
+  ws.id = "p" + nid++;
+  ws.room = null;
+  ws.isAlive = true;
+  ws.on("pong", () => { ws.isAlive = true; });
+  ws.on("message", (raw) => {
+    let m;
+    try { m = JSON.parse(raw); } catch (e) { return; }
+    const d = m.d || {};
+    if (m.t === "create" || m.t === "join") {
+      leave(ws);
+      const code = String(d.code || "").toUpperCase().slice(0, 5);
+      const name = String(d.name || "Player").slice(0, 12);
+      let r = rooms.get(code);
+      if (m.t === "create") {
+        if (r) return send(ws, "err", "Code already in use, try again");
+        r = { code, host: null, phase: "lobby", players: new Map() };
+        rooms.set(code, r);
+      } else {
+        if (!r) return send(ws, "err", "Room " + code + " not found");
+        if (r.phase !== "lobby") return send(ws, "err", "Match already started");
+        if (r.players.size >= 10) return send(ws, "err", "Room is full");
+      }
+      ws.room = r;
+      r.players.set(ws.id, { id: ws.id, name, ready: false, ws });
+      if (!r.host) r.host = ws.id;
+      send(ws, "joined", { id: ws.id });
+      sync(r);
+      return;
+    }
+    const r = ws.room;
+    if (!r) return;
+    const p = r.players.get(ws.id);
+    if (m.t === "ready" && r.phase === "lobby" && p) { p.ready = !!d.v; sync(r); }
+    else if (m.t === "start" && ws.id === r.host && r.phase === "lobby" &&
+             [...r.players.values()].every((x) => x.ready)) {
+      r.phase = "started";
+      for (const x of r.players.values()) send(x.ws, "start", {});
+      sync(r);
+    }
+  });
+  ws.on("close", () => leave(ws));
+});
+
+setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (!ws.isAlive) return ws.terminate();
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 25000);
+
+server.listen(process.env.PORT || 2567);
 console.log("Server listening");

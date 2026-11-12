@@ -71,4 +71,61 @@ wss.on("connection", (ws) => {
   ws.on("pong", () => { ws.isAlive = true; });
   ws.on("message", (raw) => {
     let m;
-    try { m = JSON.parse(raw); } catch (e) {
+    try { m = JSON.parse(raw); } catch (e) { return; }
+    const d = m.d || {};
+    if (m.t === "attach") {
+      const r = rooms.get(String(d.code || "").toUpperCase());
+      const p = r && r.players.get(d.id);
+      if (!p || r.phase !== "started" || r.live) return send(ws, "err", "Match not available");
+      p.ws = ws; ws.id = d.id; ws.room = r;
+      r.attached.add(d.id);
+      send(ws, "match", {});
+      if (r.attached.size >= r.players.size) go(r);
+      return;
+    }
+    if (m.t === "create" || m.t === "join") {
+      leave(ws);
+      const code = String(d.code || "").toUpperCase().slice(0, 5);
+      const name = String(d.name || "Player").slice(0, 12);
+      let r = rooms.get(code);
+      if (m.t === "create") {
+        if (r) return send(ws, "err", "Code already in use, try again");
+        r = { code, host: null, phase: "lobby", players: new Map(), bots: 0 };
+        rooms.set(code, r);
+      } else {
+        if (!r) return send(ws, "err", "Room " + code + " not found");
+        if (r.phase !== "lobby") return send(ws, "err", "Match already started");
+        if (r.players.size >= 10) return send(ws, "err", "Room is full");
+        if (r.players.size + r.bots >= 10) r.bots--;
+      }
+      ws.room = r;
+      r.players.set(ws.id, { id: ws.id, name, ready: false, ws });
+      if (!r.host) r.host = ws.id;
+      send(ws, "joined", { id: ws.id });
+      sync(r);
+      return;
+    }
+    const r = ws.room;
+    if (!r) return;
+    if (r.live) {
+      if (m.t === "st") {
+        if (d.id !== ws.id && !(ws.id === r.host && String(d.id).startsWith("b"))) d.id = ws.id;
+        all(r, "st", d, ws);
+      } else if (m.t === "ev") all(r, "ev", d, ws);
+      return;
+    }
+    if (r.phase !== "lobby") return;
+    const p = r.players.get(ws.id);
+    if (m.t === "ready" && p) { p.ready = !!d.v; sync(r); }
+    else if (m.t === "bots" && ws.id === r.host) {
+      r.bots = Math.max(0, Math.min(10 - r.players.size, Math.floor(Number(d.n) || 0)));
+      sync(r);
+    } else if (m.t === "start" && ws.id === r.host && [...r.players.values()].every((x) => x.ready)) startMatch(r);
+  });
+  ws.on("close", () => leave(ws));
+});
+setInterval(() => {
+  wss.clients.forEach((ws) => { if (!ws.isAlive) return ws.terminate(); ws.isAlive = false; ws.ping(); });
+}, 25000);
+server.listen(process.env.PORT || 2567);
+console.log("Server listening");

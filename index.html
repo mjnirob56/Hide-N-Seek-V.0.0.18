@@ -25,7 +25,7 @@ button,a.b{background:#f4b942;color:#111;font-weight:700;text-decoration:none;di
 <div id="cnt" style="margin:6px"></div>
 <div id="pls"></div>
 <div id="hc" style="display:none"><button id="ab">+ Bot</button><button id="rb">- Bot</button></div>
-<div style="margin:8px"><small>Match settings (host only)</small><br>Environment <select id="cwx"><option>sunny</option><option>cloudy</option><option>rainy</option><option>foggy</option><option>evening</option><option>night</option></select><br><label><input type="checkbox" id="chw"> Halloween mode</label> <label><input type="checkbox" id="ccy"> Day/Night cycle</label></div>
+<div style="margin:8px"><small>Match settings (host only)</small><br>Environment <select id="cwx"><option>sunny</option><option>cloudy</option><option>rainy</option><option>foggy</option><option>evening</option><option>night</option></select><br>Mode <select id="cmd"><option value="classic">Classic</option><option value="quick">Quick (7 min)</option><option value="hardcore">Hardcore (no radar/whistle/decoy/pickups)</option></select><br><label><input type="checkbox" id="chw"> Halloween mode</label> <label><input type="checkbox" id="ccy"> Day/Night cycle</label></div>
 <button id="rd">Ready</button><button id="sg" disabled>Start Match</button>
 <p><small>Fewer than 5 players are filled with bots at start.</small></p>
 </div></div>
@@ -64,7 +64,7 @@ function render(d){last=d;$("rc").textContent=d.code;
   +d.bots.map(n=>`<div class="pl"><span class="bot">${esc(n)} (bot)</span><span class="ok">READY</span></div>`).join("");
  $("hc").style.display=ish&&d.phase==="lobby"?"block":"none";
  $("sg").disabled=!(ish&&d.phase==="lobby"&&d.players.every(p=>p.ready));
- $("rd").disabled=d.phase!=="lobby";$("rd").textContent=rdy?"Unready":"Ready";const c=d.cfg||{};$("cwx").value=c.wx||"sunny";$("chw").checked=!!c.hw;$("ccy").checked=!!c.cyc;["cwx","chw","ccy"].forEach(i=>$(i).disabled=!(ish&&d.phase==="lobby"))}
+ $("rd").disabled=d.phase!=="lobby";$("rd").textContent=rdy?"Unready":"Ready";const c=d.cfg||{};$("cwx").value=c.wx||"sunny";$("cmd").value=c.mode||"classic";$("chw").checked=!!c.hw;$("ccy").checked=!!c.cyc;["cwx","cmd","chw","ccy"].forEach(i=>$(i).disabled=!(ish&&d.phase==="lobby"))}
 const QP=new URLSearchParams(location.search);
 $("sh").onclick=async()=>{const code=$("rc").textContent,url=location.origin+location.pathname+"?room="+code,text="Join my School Hide & Seek room! Code: "+code;try{if(navigator.share)await navigator.share({title:"School Hide & Seek",text,url});else{await navigator.clipboard.writeText(text+" "+url);st("Link copied!")}}catch(e){}};
 if(QP.get("again")&&QP.get("id")&&QP.get("room")){$("nm").value=QP.get("name")||$("nm").value;go(false,{code:QP.get("room").toUpperCase(),id:QP.get("id")})}else if(QP.get("room"))$("cd").value=QP.get("room").toUpperCase();
@@ -72,5 +72,5 @@ $("cr").onclick=()=>go(true);$("jn").onclick=()=>go(false);
 $("rd").onclick=()=>{rdy=!rdy;send("ready",{v:rdy})};$("sg").onclick=()=>send("start",{});
 $("ab").onclick=()=>last&&send("bots",{n:last.bots.length+1});
 $("rb").onclick=()=>last&&send("bots",{n:last.bots.length-1});
-const sendCfg=()=>send("cfg",{wx:$("cwx").value,hw:$("chw").checked?1:0,cyc:$("ccy").checked?1:0});$("cwx").onchange=$("chw").onchange=$("ccy").onchange=sendCfg;
+const sendCfg=()=>send("cfg",{wx:$("cwx").value,mode:$("cmd").value,hw:$("chw").checked?1:0,cyc:$("ccy").checked?1:0});$("cwx").onchange=$("cmd").onchange=$("chw").onchange=$("ccy").onchange=sendCfg;
 </script><script>if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(function(){})</script></body></html>

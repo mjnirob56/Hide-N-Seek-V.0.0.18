@@ -45,7 +45,9 @@ function go(r) {
   for (const x of r.roster) if (!x.bot) { const q = r.players.get(x.id); x.look = q && q.look; }
   if (!r.players.size) { rooms.delete(r.code); return; }
   r.host = r.players.keys().next().value;
-  r.seeker = r.roster[Math.floor(Math.random() * r.roster.length)].id;
+  const humans = r.roster.filter((x) => !x.bot);
+  const pool = humans.length > 3 ? humans : r.roster;
+  r.seeker = pool[Math.floor(Math.random() * pool.length)].id;
   all(r, "go", { roster: r.roster, seeker: r.seeker, host: r.host, cfg: r.cfg });
 }
 function drop(r, id) {
@@ -124,7 +126,7 @@ wss.on("connection", (ws) => {
       let r = rooms.get(code);
       if (m.t === "create") {
         if (r) return send(ws, "err", "Code already in use, try again");
-        r = { code, host: null, phase: "lobby", players: new Map(), bots: 0, cfg: { wx: "sunny", hw: 0, cyc: 0 }, dead: new Set(), ended: null };
+        r = { code, host: null, phase: "lobby", players: new Map(), bots: 0, cfg: { wx: "sunny", hw: 0, cyc: 0, mode: "classic" }, dead: new Set(), ended: null };
         rooms.set(code, r);
       } else {
         if (!r) return send(ws, "err", "Room " + code + " not found");
@@ -176,6 +178,7 @@ wss.on("connection", (ws) => {
       r.cfg = {
         wx: ["sunny", "cloudy", "rainy", "foggy", "evening", "night"].includes(d.wx) ? d.wx : "sunny",
         hw: d.hw ? 1 : 0, cyc: d.cyc ? 1 : 0,
+        mode: ["classic", "quick", "hardcore"].includes(d.mode) ? d.mode : "classic",
       };
       sync(r);
     } else if (m.t === "bots" && ws.id === r.host) {

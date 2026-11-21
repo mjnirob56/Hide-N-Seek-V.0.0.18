@@ -45,10 +45,28 @@ function go(r) {
   for (const x of r.roster) if (!x.bot) { const q = r.players.get(x.id); x.look = q && q.look; }
   if (!r.players.size) { rooms.delete(r.code); return; }
   r.host = r.players.keys().next().value;
-  const humans = r.roster.filter((x) => !x.bot);
-  const pool = humans.length > 3 ? humans : r.roster;
-  r.seeker = pool[Math.floor(Math.random() * pool.length)].id;
-  all(r, "go", { roster: r.roster, seeker: r.seeker, host: r.host, cfg: r.cfg });
+  r.seeker = null;
+  r.rps = {};
+  all(r, "go", { roster: r.roster, host: r.host, cfg: r.cfg, rps: true });
+  r.rt = setTimeout(() => finishRps(r), 7500);
+}
+function finishRps(r) {
+  if (r.seeker || !r.roster) return;
+  clearTimeout(r.rt);
+  const ch = {};
+  for (const x of r.roster) ch[x.id] = (!x.bot && r.rps && r.rps[x.id] != null) ? r.rps[x.id] : Math.floor(Math.random() * 3);
+  const ids = r.roster.map((x) => x.id), set = [...new Set(ids.map((i) => ch[i]))];
+  let cand = ids.slice(), tie = true;
+  if (set.length === 2) {
+    tie = false;
+    const loser = (((set[0] - set[1] + 3) % 3) === 1) ? set[1] : set[0];
+    cand = ids.filter((i) => ch[i] === loser);
+  }
+  const humans = new Set(r.roster.filter((x) => !x.bot).map((x) => x.id));
+  let pool = cand;
+  if (humans.size > 3) { const hc = cand.filter((i) => humans.has(i)); pool = hc.length ? hc : [...humans]; }
+  r.seeker = pool[Math.floor(Math.random() * pool.length)];
+  all(r, "rpsres", { seeker: r.seeker, ch, tie });
 }
 function drop(r, id) {
   r.players.delete(id);
@@ -164,6 +182,11 @@ wss.on("connection", (ws) => {
       } else if (m.t === "sig") {
         const q = r.players.get(d.to);
         if (q && q.ws) send(q.ws, "sig", { from: ws.id, s: d.s });
+      } else if (m.t === "rps") {
+        if (!r.seeker && r.rps) {
+          r.rps[ws.id] = ((Number(d.c) % 3) + 3) % 3;
+          if (r.roster.filter((x) => !x.bot).every((x) => r.rps[x.id] != null)) finishRps(r);
+        }
       } else if (m.t === "again" && r.ended) {
         const me = r.players.get(ws.id);
         all(r, "again", { by: me ? me.name : "?" });
